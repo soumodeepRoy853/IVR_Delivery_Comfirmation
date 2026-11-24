@@ -9,11 +9,8 @@ import { buildVoiceTwiml, emptyTwiml } from '../ivr/twiml';
 export const twilioWebhooksRouter = Router();
 
 function verifySignature(req: Request, res: Response, next: NextFunction): void {
-  if (
-    config.telephonyProvider !== 'twilio' ||
-    !config.webhookValidation ||
-    req.header('x-mock-webhook') === 'true'
-  ) {
+  // Only the offline mock provider is allowed to skip signature validation.
+  if (config.telephonyProvider !== 'twilio' || !config.webhookValidation) {
     next();
     return;
   }
