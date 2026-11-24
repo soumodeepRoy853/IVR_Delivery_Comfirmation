@@ -8,7 +8,11 @@
   ],
   "scripts": {
     "dev:api": "npm run dev -w @ivr/api",
+    "dev:worker": "npm run worker -w @ivr/api",
     "dev:web": "npm run dev -w @ivr/web",
+    "start:api": "npm run start -w @ivr/api",
+    "start:worker": "npm run start:worker -w @ivr/api",
+    "start:web": "npm run start -w @ivr/web",
     "build": "npm run build -w @ivr/api && npm run build -w @ivr/web",
     "test": "npm run test -w @ivr/api",
     "migrate": "npm run migrate -w @ivr/api",

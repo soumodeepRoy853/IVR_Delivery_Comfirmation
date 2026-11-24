@@ -9,7 +9,8 @@ answer is saved against the delivery. The table updates automatically via pollin
 - Deliveries dashboard with order ID, customer, `+91` phone, product, delivery date, confirmation
   status and last call time.
 - Filter by status: Not called, Calling, Received, Not received, No answer / Failed.
-- One-click outbound calls; provider call ID is stored and the status moves to Calling.
+- One-click outbound calls are queued in Redis/BullMQ; a worker places them with a configurable
+  concurrency cap and rate limit, retries provider errors, and stores the provider call ID.
 - IVR prompt with DTMF **and** speech input (English + Hindi), one repeat on timeout/invalid input,
   and a thank-you before hang-up.
 - Provider webhooks record the response and call status (no answer, busy, failed), with a per-call log
@@ -24,6 +25,7 @@ answer is saved against the delivery. The table updates automatically via pollin
 | Frontend | Next.js 15 (App Router), React 19, SWR |
 | Backend | Node.js, Express, TypeScript |
 | Database | PostgreSQL 16 |
+| Queue | Redis 7 + BullMQ worker |
 | Telephony | Twilio (with a built-in mock provider) |
 
 ## Telephony provider: why Twilio
@@ -54,15 +56,19 @@ npm install
 npm run migrate
 npm run seed
 npm run dev:api        # terminal 1 — http://localhost:4000
-npm run dev:web        # terminal 2 — http://localhost:3000
+npm run dev:worker     # terminal 2 — processes the call queue
+npm run dev:web        # terminal 3 — http://localhost:3000
 ```
 
 Open <http://localhost:3000>. The mock provider simulates a call and posts to the same webhooks as
 Twilio. Pick a **Mock outcome** in the toolbar (Received, Not received, No answer, Timeout) and click
 **Call** to exercise each path. Seed data contains 15 deliveries across all five statuses.
 
-Useful scripts: `npm test` (unit tests), `npm run build` (both packages). The database is persisted in
-the Docker volume `ivr-postgres-data`.
+`POST /api/deliveries/:id/call` responds immediately with `202` and a `jobId`; the worker then places
+the call, so **Calling** means *queued/being attempted*, not necessarily already ringing.
+
+Useful scripts: `npm test` (unit tests), `npm run build` (both packages). Data is persisted in the Docker
+volumes `ivr-postgres-data` and `ivr-redis-data`.
 
 ## Environment variables
 
@@ -80,6 +86,12 @@ reads `NEXT_PUBLIC_API_BASE_URL` (set `apps/web/.env.local` if you need a differ
 | `TWILIO_ACCOUNT_SID` | — | Required in Twilio mode |
 | `TWILIO_AUTH_TOKEN` | — | Required in Twilio mode and for signature validation |
 | `TWILIO_FROM_NUMBER` | — | Twilio number that places calls (E.164) |
+| `REDIS_URL` | `redis://localhost:6379` | Redis connection used by BullMQ |
+| `CALL_QUEUE_CONCURRENCY` | `2` | Max calls the worker places at once |
+| `CALL_QUEUE_RATE_MAX` | `5` | Max call placements per rate window |
+| `CALL_QUEUE_RATE_DURATION_MS` | `1000` | Rate-limit window in milliseconds |
+| `CALL_RETRY_ATTEMPTS` | `3` | Total attempts before a failed placement is logged |
+| `CALL_RETRY_DELAY_MS` | `5000` | Base exponential backoff delay |
 | `COMPANY_NAME` | `Our Team` | Company name spoken in the IVR prompt |
 | `WEBHOOK_VALIDATION` | `true` | Set to `false` only for local debugging in Twilio mode |
 
@@ -90,23 +102,42 @@ Never commit real credentials. `.env` and `.env.*` are gitignored (`.env.example
 1. Create a Twilio trial account, verify **your own** Indian mobile number, and get a Twilio number.
 2. Expose the API publicly, e.g. `ngrok http 4000`. Note the HTTPS URL.
 3. In `.env`, set `TELEPHONY_PROVIDER=twilio`, `PUBLIC_BASE_URL=<ngrok url>`, the three `TWILIO_*`
-   variables and `WEBHOOK_VALIDATION=true`. Restart the API.
-4. In Twilio's console the webhook URLs are configured automatically per call by the API:
-   `POST {PUBLIC_BASE_URL}/webhooks/twilio/voice` (IVR prompt), `/gather` (response) and `/status`
-   (call status). No manual console webhook configuration is required.
+   variables and `WEBHOOK_VALIDATION=true`. Restart **both** the API and the worker so they pick up
+   the new provider and URL.
+4. The webhook URLs are configured automatically per call by the worker:
+   `POST {PUBLIC_BASE_URL}/webhooks/twilio/voice?deliveryId=...` (IVR prompt), `/gather` (response) and
+   `/status` (call status). No manual console webhook configuration is required.
 5. Click Call on a delivery whose phone is your verified number. Press 1, 2, or nothing to test the
    branches. Watch the table update and open **Log** to see the raw input, duration and recording link.
+
+For deployment, run three processes against managed Postgres and Redis:
+
+```bash
+npm run build
+npm run start:api       # API, public HTTPS URL = PUBLIC_BASE_URL
+npm run start:worker    # can be scaled to multiple instances behind the same Redis
+npm run start:web       # set NEXT_PUBLIC_API_BASE_URL to the API's public URL
+```
+
+Run `npm run migrate` (and optionally `npm run seed`) once during setup. Webhook endpoints must be
+publicly reachable and must not be blocked by app-level auth; they are protected by Twilio signatures.
 
 ## Architecture note
 
 ```
 Browser (Next.js, SWR polling every 3s)
         │  GET /api/deliveries?status=
-        │  POST /api/deliveries/:id/call
+        │  POST /api/deliveries/:id/call  → 202 { jobId }
         ▼
-Express API ──► telephony provider interface ──► Twilio REST (or mock simulator)
-        │                                              │
-        │  POST /webhooks/twilio/{voice,gather,status} ◄┘
+Express API ──► Redis / BullMQ queue ──► Worker (concurrency + rate limiter)
+                                             │
+                                             ▼
+                                  telephony provider interface
+                                             │
+                                             ▼
+                              Twilio REST (or mock simulator)
+                                             │
+        POST /webhooks/twilio/{voice,gather,status} ◄──────────┘
         ▼
 Postgres: deliveries (status, last_call_at) + call_logs (per attempt: time, duration,
 outcome, raw input, provider status, raw payload, recording URL)
@@ -114,9 +145,18 @@ outcome, raw input, provider status, raw payload, recording URL)
 
 Key decisions:
 
+- The API only claims the delivery (`status = calling`) and enqueues a job, so click-to-call stays fast
+  regardless of how many calls are pending. The worker is the only component that talks to the provider.
+- Worker concurrency and rate limits are configurable (`CALL_QUEUE_CONCURRENCY`, `CALL_QUEUE_RATE_*`);
+  you can run multiple worker processes to scale out while staying under provider limits.
+- A provider call ID is stored on the BullMQ job *before* the DB write. If a retry happens, the worker
+  reuses that ID instead of placing a duplicate call. After all retries fail, the delivery returns to
+  its previous status and a failed call log is written.
 - The provider interface keeps Twilio-specific code behind `placeCall`; the mock provider emits the
   same webhook payloads, so all business logic is shared and testable offline.
-- Webhook requests are signature-checked with `TWILIO_AUTH_TOKEN` in Twilio mode.
+- Webhook requests are signature-checked with `TWILIO_AUTH_TOKEN` in Twilio mode; only mock mode can
+  skip that check. Webhook URLs carry `deliveryId` as a fallback in case a callback beats the worker's
+  call-log insert.
 - Writes are keyed by `provider_call_id` and only transition `calling` deliveries, so duplicate or
   late callbacks cannot overwrite a customer's answer.
 - An invalid key or timeout repeats the question once, then thanks the caller and ends the call.
@@ -131,14 +171,17 @@ Key decisions:
 - Trial accounts can only call verified numbers, and a public webhook URL is required for live calls.
 - Speech recognition is best-effort (network and carrier dependent); keypress input is required.
 - Failed/busy/no-answer calls share the single status "No answer / Failed", as specified.
-- Automatic retry is not enabled by default; it can be added on top of the status callback.
+- Call placement is at-least-once: the worker records the provider SID on the job to avoid duplicates
+  on retry, but a provider-side duplicate cannot be ruled out in a crash between those two steps.
+- Automatic retry of *unanswered* calls is not enabled; only failed *placements* are retried by the queue.
+- Redis is required even in mock mode because both modes use the same queue.
 
 ## Repository layout
 
 ```
-docker-compose.yml          Postgres 16
+docker-compose.yml          Postgres 16 + Redis 7
 .env.example                Environment template (no secrets)
-apps/api/                   Express API, schema, seed, providers, IVR webhooks, tests
+apps/api/                   Express API, queue worker, schema, seed, providers, IVR webhooks, tests
 apps/web/                   Next.js dashboard
 ```
 
@@ -149,5 +192,7 @@ apps/web/                   Next.js dashboard
 - Mock-mode end-to-end run against Docker Postgres: click-to-call moved a delivery to Calling, then
   webhooks produced Received, No answer / Failed (no answer and timeout) and recorded duration/raw
   input; status filtering and bulk calling returned correct results; dashboard served HTTP 200.
+- Queued-flow run: six calls with mixed outcomes were enqueued in ~134 ms total; the worker processed
+  them with the configured limits and every delivery ended with the expected status and call log.
 - Live Twilio calling was not performed because it requires your trial credentials, a verified phone
   number and a public webhook URL.
