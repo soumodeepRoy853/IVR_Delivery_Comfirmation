@@ -24,6 +24,11 @@ function required(name: string, fallback?: string): string {
   return value;
 }
 
+function positiveInt(name: string, fallback: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
 export type TelephonyProviderName = 'mock' | 'twilio';
 
 const provider = (process.env.TELEPHONY_PROVIDER ?? 'mock').toLowerCase();
@@ -42,6 +47,12 @@ export const config = {
   twilioFromNumber: process.env.TWILIO_FROM_NUMBER ?? '',
   companyName: process.env.COMPANY_NAME ?? 'Our Team',
   webhookValidation: (process.env.WEBHOOK_VALIDATION ?? 'true').toLowerCase() !== 'false',
+  redisUrl: required('REDIS_URL', 'redis://localhost:6379'),
+  callQueueConcurrency: positiveInt('CALL_QUEUE_CONCURRENCY', 2),
+  callQueueRateMax: positiveInt('CALL_QUEUE_RATE_MAX', 5),
+  callQueueRateDurationMs: positiveInt('CALL_QUEUE_RATE_DURATION_MS', 1000),
+  callRetryAttempts: positiveInt('CALL_RETRY_ATTEMPTS', 3),
+  callRetryDelayMs: positiveInt('CALL_RETRY_DELAY_MS', 5000),
 } as const;
 
 if (config.telephonyProvider === 'twilio') {
