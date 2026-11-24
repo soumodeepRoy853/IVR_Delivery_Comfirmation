@@ -4,6 +4,7 @@ import { config } from './config';
 import { query } from './db';
 import { HttpError } from './http';
 import { deliveriesRouter } from './routes/deliveries';
+import { twilioWebhooksRouter } from './webhooks/twilio';
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.get('/api/health', async (_req, res) => {
 });
 
 app.use('/api/deliveries', deliveriesRouter);
+app.use('/webhooks/twilio', twilioWebhooksRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' });

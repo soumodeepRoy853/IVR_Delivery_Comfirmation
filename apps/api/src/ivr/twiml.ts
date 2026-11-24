@@ -68,6 +68,14 @@ export function buildRepeatTwiml(baseUrl: string): string {
   return response.toString();
 }
 
+/** Final message when the caller never provided a usable answer. */
+export function buildNoInputGoodbyeTwiml(): string {
+  const response = new VoiceResponse();
+  response.say(VOICE, 'Thank you for your time. We will try reaching you later. Goodbye.');
+  response.hangup();
+  return response.toString();
+}
+
 export function emptyTwiml(): string {
   return '<?xml version="1.0" encoding="UTF-8"?><Response/>';
 }
