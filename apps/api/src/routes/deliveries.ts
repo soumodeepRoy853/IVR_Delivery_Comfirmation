@@ -59,8 +59,8 @@ deliveriesRouter.post(
     const result = await startCall(req.params.id, req.body?.outcome);
     res.status(202).json({
       delivery: result.delivery,
-      providerCallId: result.providerCallId,
-      message: 'Call initiated',
+      jobId: result.jobId,
+      message: 'Call queued',
     });
   }),
 );

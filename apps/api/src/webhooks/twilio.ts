@@ -45,6 +45,7 @@ twilioWebhooksRouter.post(
         date: delivery.delivery_date,
         attempt: Number(req.query.attempt ?? 1),
         baseUrl: config.publicBaseUrl,
+        deliveryId: typeof req.query.deliveryId === 'string' ? req.query.deliveryId : undefined,
       }),
     );
   }),
@@ -55,8 +56,14 @@ twilioWebhooksRouter.post(
   asyncHandler(async (req, res) => {
     const callSid = String(req.body?.CallSid ?? '');
     const attempt = Number(req.query.attempt ?? 1);
+    const deliveryId = typeof req.query.deliveryId === 'string' ? req.query.deliveryId : undefined;
     const twiml = callSid
-      ? await applyGather(callSid, { digits: req.body?.Digits, speech: req.body?.SpeechResult }, attempt)
+      ? await applyGather(
+          callSid,
+          { digits: req.body?.Digits, speech: req.body?.SpeechResult },
+          attempt,
+          deliveryId,
+        )
       : emptyTwiml();
     res.type('application/xml').send(twiml);
   }),
@@ -66,7 +73,8 @@ twilioWebhooksRouter.post(
   '/status',
   asyncHandler(async (req, res) => {
     const callSid = String(req.body?.CallSid ?? '');
-    if (callSid) await applyStatus(callSid, req.body ?? {});
+    const deliveryId = typeof req.query.deliveryId === 'string' ? req.query.deliveryId : undefined;
+    if (callSid) await applyStatus(callSid, req.body ?? {}, deliveryId);
     res.type('text/plain').send('OK');
   }),
 );

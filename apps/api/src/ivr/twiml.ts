@@ -11,6 +11,7 @@ export interface VoiceTwimlInput {
   date: string;
   attempt: number;
   baseUrl: string;
+  deliveryId?: string;
 }
 
 /** Initial (or repeated) IVR question with DTMF and speech input enabled. */
@@ -27,6 +28,10 @@ export function buildVoiceTwiml(input: VoiceTwimlInput): string {
     `${input.product} delivered on ${formatDeliveryDate(input.date)}. ` +
     'If you received it, press 1 or say Yes. If not, press 2 or say No.';
 
+  const deliveryParam = input.deliveryId
+    ? `&deliveryId=${encodeURIComponent(input.deliveryId)}`
+    : '';
+
   const gatherAttributes = {
     input: ['dtmf', 'speech'],
     numDigits: 1,
@@ -34,7 +39,7 @@ export function buildVoiceTwiml(input: VoiceTwimlInput): string {
     speechTimeout: 'auto',
     language: 'en-IN',
     speechLanguage: 'en-IN hi-IN',
-    action: `${input.baseUrl}/webhooks/twilio/gather?attempt=${attempt}`,
+    action: `${input.baseUrl}/webhooks/twilio/gather?attempt=${attempt}${deliveryParam}`,
     method: 'POST',
   } as Parameters<typeof response.gather>[0] & { speechLanguage: string };
 
@@ -61,10 +66,11 @@ export function buildGoodbyeTwiml(positive: boolean): string {
 }
 
 /** Ask the caller to repeat the question once. */
-export function buildRepeatTwiml(baseUrl: string): string {
+export function buildRepeatTwiml(baseUrl: string, deliveryId?: string): string {
   const response = new VoiceResponse();
   response.say(VOICE, 'Let me ask that again.');
-  response.redirect({ method: 'POST' }, `${baseUrl}/webhooks/twilio/voice?attempt=2`);
+  const deliveryParam = deliveryId ? `&deliveryId=${encodeURIComponent(deliveryId)}` : '';
+  response.redirect({ method: 'POST' }, `${baseUrl}/webhooks/twilio/voice?attempt=2${deliveryParam}`);
   return response.toString();
 }
 

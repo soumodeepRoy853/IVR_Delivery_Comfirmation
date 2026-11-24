@@ -8,15 +8,34 @@ import {
   emptyTwiml,
 } from '../ivr/twiml';
 import { getDeliveryByCallSid } from './deliveries';
-import type { CallOutcome } from '../types';
+import type { CallOutcome, DeliveryWithCalls } from '../types';
+
+/**
+ * Finds the delivery for a call. A provider webhook can arrive before the worker has
+ * inserted the call log, so the delivery id carried in the webhook URL is a fallback.
+ */
+async function findDelivery(callSid: string, deliveryId?: string): Promise<DeliveryWithCalls | null> {
+  let delivery = await getDeliveryByCallSid(callSid);
+  if (!delivery && deliveryId) {
+    await query(
+      `INSERT INTO call_logs (delivery_id, provider_call_id, started_at, outcome, provider_status)
+       VALUES ($1, $2, now(), 'pending', 'webhook-before-log')
+       ON CONFLICT (provider_call_id) DO NOTHING`,
+      [deliveryId, callSid],
+    );
+    delivery = await getDeliveryByCallSid(callSid);
+  }
+  return delivery;
+}
 
 /** Handles a DTMF/speech webhook and returns the TwiML response. */
 export async function applyGather(
   callSid: string,
   input: { digits?: string | null; speech?: string | null },
   attempt: number,
+  deliveryId?: string,
 ): Promise<string> {
-  const delivery = await getDeliveryByCallSid(callSid);
+  const delivery = await findDelivery(callSid, deliveryId);
   if (!delivery) return emptyTwiml();
 
   const call = delivery.calls[0];
@@ -51,7 +70,7 @@ export async function applyGather(
         WHERE provider_call_id = $1 AND outcome = 'pending'`,
       [callSid, interpretation.rawInput],
     );
-    return buildRepeatTwiml(config.publicBaseUrl);
+    return buildRepeatTwiml(config.publicBaseUrl, deliveryId);
   }
 
   const finalOutcome: CallOutcome = interpretation.outcome === 'invalid_input' ? 'invalid_input' : 'no_input';
@@ -71,8 +90,12 @@ export async function applyGather(
 }
 
 /** Handles provider call-status callbacks (ringing, completed, no-answer, busy, failed). */
-export async function applyStatus(callSid: string, body: Record<string, unknown>): Promise<void> {
-  const delivery = await getDeliveryByCallSid(callSid);
+export async function applyStatus(
+  callSid: string,
+  body: Record<string, unknown>,
+  deliveryId?: string,
+): Promise<void> {
+  const delivery = await findDelivery(callSid, deliveryId);
   if (!delivery) return;
 
   const providerStatus = String(body.CallStatus ?? '').toLowerCase();

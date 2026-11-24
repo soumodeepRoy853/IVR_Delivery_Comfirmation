@@ -13,6 +13,7 @@ const base = {
   product: 'Wireless Headphones',
   date: '2026-11-24',
   baseUrl: 'https://example.ngrok-free.app',
+  deliveryId: 'delivery-123',
 };
 
 test('voice prompt is personalised and accepts DTMF and speech', () => {
@@ -23,7 +24,7 @@ test('voice prompt is personalised and accepts DTMF and speech', () => {
   assert.match(xml, /press 2 or say No/);
   assert.match(xml, /input="dtmf speech"/);
   assert.match(xml, /speechLanguage="en-IN hi-IN"/);
-  assert.match(xml, /attempt=1/);
+  assert.match(xml, /attempt=1(&amp;|&)deliveryId=delivery-123/);
 });
 
 test('second attempt repeats the question once', () => {

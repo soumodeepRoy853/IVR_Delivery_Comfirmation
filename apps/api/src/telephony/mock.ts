@@ -29,11 +29,12 @@ async function postWebhook(path: string, body: Record<string, string>): Promise<
   }
 }
 
-async function simulate(callSid: string, outcome: MockOutcome): Promise<void> {
+async function simulate(callSid: string, outcome: MockOutcome, deliveryId: string): Promise<void> {
+  const deliveryParam = `?deliveryId=${encodeURIComponent(deliveryId)}`;
   await delay(1800);
 
   if (outcome === 'no_answer') {
-    await postWebhook('/webhooks/twilio/status', {
+    await postWebhook(`/webhooks/twilio/status${deliveryParam}`, {
       CallSid: callSid,
       CallStatus: 'no-answer',
       CallDuration: '0',
@@ -42,18 +43,18 @@ async function simulate(callSid: string, outcome: MockOutcome): Promise<void> {
   }
 
   if (outcome === 'timeout') {
-    await postWebhook('/webhooks/twilio/gather?attempt=1', { CallSid: callSid, Digits: '' });
+    await postWebhook(`/webhooks/twilio/gather?attempt=1${deliveryParam}`, { CallSid: callSid, Digits: '' });
     await delay(1200);
-    await postWebhook('/webhooks/twilio/gather?attempt=2', { CallSid: callSid, Digits: '' });
+    await postWebhook(`/webhooks/twilio/gather?attempt=2${deliveryParam}`, { CallSid: callSid, Digits: '' });
   } else {
-    await postWebhook('/webhooks/twilio/gather?attempt=1', {
+    await postWebhook(`/webhooks/twilio/gather?attempt=1${deliveryParam}`, {
       CallSid: callSid,
       Digits: outcome === 'received' ? '1' : '2',
     });
   }
 
   await delay(300);
-  await postWebhook('/webhooks/twilio/status', {
+  await postWebhook(`/webhooks/twilio/status${deliveryParam}`, {
     CallSid: callSid,
     CallStatus: 'completed',
     CallDuration: '24',
@@ -69,7 +70,7 @@ export const mockProvider: TelephonyProvider = {
     const providerCallId = `mock-${randomUUID()}`;
 
     // Fire-and-forget simulation so the API can respond immediately.
-    void simulate(providerCallId, outcome);
+    void simulate(providerCallId, outcome, input.deliveryId);
 
     return { providerCallId, providerStatus: 'queued' };
   },
