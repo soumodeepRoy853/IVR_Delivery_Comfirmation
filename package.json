@@ -1,0 +1,20 @@
+{
+  "name": "ivr-delivery-confirmation",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @ivr/api",
+    "dev:web": "npm run dev -w @ivr/web",
+    "build": "npm run build -w @ivr/api && npm run build -w @ivr/web",
+    "test": "npm run test -w @ivr/api",
+    "migrate": "npm run migrate -w @ivr/api",
+    "seed": "npm run seed -w @ivr/api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
