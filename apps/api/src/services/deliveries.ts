@@ -1,6 +1,7 @@
-import { query } from '../db';
+import { config } from '../config';
+import { query, withTransaction } from '../db';
 import { HttpError } from '../http';
-import { enqueueCall } from '../queue/callQueue';
+import { telephonyProvider } from '../telephony';
 import type { CallLog, DeliveryStatus, DeliveryWithCalls } from '../types';
 
 const SELECT_COLUMNS = `
@@ -89,39 +90,40 @@ export async function getDeliveryByCallSid(callSid: string): Promise<DeliveryWit
 
 export interface StartCallResult {
   delivery: DeliveryWithCalls;
-  jobId: string;
+  providerCallId: string;
 }
 
-/** Claims the delivery for a call and enqueues the work. The worker places the actual call. */
+/** Places an outbound call immediately and records the provider call id. */
 export async function startCall(deliveryId: string, outcomeOverride?: string): Promise<StartCallResult> {
   const existing = await getDelivery(deliveryId);
   if (!existing) throw new HttpError('Delivery not found', 404);
   if (existing.status === 'calling') throw new HttpError('A call is already in progress for this delivery', 409);
 
-  const claim = await query<{ id: string }>(
-    `UPDATE deliveries
-        SET status = 'calling', last_call_at = now(), updated_at = now()
-      WHERE id = $1 AND status <> 'calling'
-      RETURNING id`,
-    [deliveryId],
-  );
-  if (claim.rowCount === 0) throw new HttpError('A call is already in progress for this delivery', 409);
+  const result = await telephonyProvider.placeCall({
+    deliveryId,
+    to: existing.phone_e164,
+    promptUrl: `${config.publicBaseUrl}/webhooks/twilio/voice?deliveryId=${deliveryId}`,
+    statusCallbackUrl: `${config.publicBaseUrl}/webhooks/twilio/status?deliveryId=${deliveryId}`,
+    record: true,
+    outcome: telephonyProvider.name === 'mock' ? outcomeOverride : undefined,
+  });
 
-  let jobId: string;
-  try {
-    jobId = await enqueueCall({
-      deliveryId,
-      to: existing.phone_e164,
-      previousStatus: existing.status,
-      outcome: outcomeOverride,
-    });
-  } catch (error) {
-    await query(
-      `UPDATE deliveries SET status = $2, updated_at = now() WHERE id = $1`,
-      [deliveryId, existing.status],
+  await withTransaction(async (client) => {
+    const updated = await client.query(
+      `UPDATE deliveries
+          SET status = 'calling', last_call_at = now(), updated_at = now()
+        WHERE id = $1 AND status <> 'calling'`,
+      [deliveryId],
     );
-    throw error;
-  }
+    if (updated.rowCount === 0) {
+      throw new HttpError('A call is already in progress for this delivery', 409);
+    }
+    await client.query(
+      `INSERT INTO call_logs (delivery_id, provider_call_id, started_at, outcome, provider_status, raw_payload)
+       VALUES ($1, $2, now(), 'pending', $3, $4)`,
+      [deliveryId, result.providerCallId, result.providerStatus, JSON.stringify({ placeCallResult: result })],
+    );
+  });
 
   return {
     delivery: {
@@ -129,6 +131,6 @@ export async function startCall(deliveryId: string, outcomeOverride?: string): P
       status: 'calling',
       last_call_at: new Date().toISOString(),
     },
-    jobId,
+    providerCallId: result.providerCallId,
   };
 }
