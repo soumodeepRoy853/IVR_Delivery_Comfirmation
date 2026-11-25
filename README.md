@@ -64,7 +64,7 @@ npm run dev:web        # terminal 2 — http://localhost:3000
 ```
 
 Open <http://localhost:3000>. The mock provider simulates a call and posts to the same webhooks as
-Twilio. Pick a **Mock outcome** in the toolbar (Received, Not received, No answer, Timeout) and click
+Twilio. Set `MOCK_OUTCOME` to `received`, `not_received`, `no_answer` or `timeout` in `.env` and click
 **Call** to exercise each path. Seed data contains 15 deliveries across all five statuses.
 
 With the example `.env`, API auth is enabled using `DASHBOARD_USER=admin` /

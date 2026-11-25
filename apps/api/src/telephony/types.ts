@@ -4,8 +4,6 @@ export interface PlaceCallInput {
   promptUrl: string;
   statusCallbackUrl: string;
   record?: boolean;
-  /** Mock-only override; ignored by real providers. */
-  outcome?: string;
 }
 
 export interface PlaceCallResult {

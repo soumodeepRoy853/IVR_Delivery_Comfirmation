@@ -65,7 +65,7 @@ export const mockProvider: TelephonyProvider = {
   name: 'mock',
 
   async placeCall(input: PlaceCallInput): Promise<PlaceCallResult> {
-    const requested = (input.outcome ?? config.mockOutcome).toLowerCase() as MockOutcome;
+    const requested = config.mockOutcome.toLowerCase() as MockOutcome;
     const outcome = KNOWN_OUTCOMES.includes(requested) ? requested : 'received';
     const providerCallId = `mock-${randomUUID()}`;
 
