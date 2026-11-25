@@ -1,8 +1,23 @@
 import { Pool, type QueryResultRow } from 'pg';
 import { config } from './config';
 
+function poolSettings() {
+  const parsed = new URL(config.databaseUrl);
+  const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+
+  // Newer pg versions treat sslmode=require as full certificate verification.
+  // Supabase's pooler cert is not trusted by Node's default CA store, so pass
+  // SSL as a client option instead and encrypt without verifying the chain.
+  parsed.searchParams.delete('sslmode');
+
+  return {
+    connectionString: isLocal ? config.databaseUrl : parsed.toString(),
+    ssl: isLocal ? undefined : ({ rejectUnauthorized: false } as const),
+  };
+}
+
 export const pool = new Pool({
-  connectionString: config.databaseUrl,
+  ...poolSettings(),
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
