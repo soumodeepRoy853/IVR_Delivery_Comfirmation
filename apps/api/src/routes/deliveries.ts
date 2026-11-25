@@ -32,7 +32,7 @@ deliveriesRouter.post(
     if (ids.length > 20) throw new HttpError('Maximum 20 deliveries per bulk call');
 
     const results = await Promise.allSettled(
-      ids.map((id: string) => startCall(id, req.body?.outcome)),
+      ids.map((id: string) => startCall(id)),
     );
 
     res.json({
@@ -56,7 +56,7 @@ deliveriesRouter.get(
 deliveriesRouter.post(
   '/:id/call',
   asyncHandler(async (req, res) => {
-    const result = await startCall(req.params.id, req.body?.outcome);
+    const result = await startCall(req.params.id);
     res.status(202).json({
       delivery: result.delivery,
       providerCallId: result.providerCallId,

@@ -116,7 +116,7 @@ export interface StartCallResult {
 }
 
 /** Places an outbound call immediately and records the provider call id. */
-export async function startCall(deliveryId: string, outcomeOverride?: string): Promise<StartCallResult> {
+export async function startCall(deliveryId: string): Promise<StartCallResult> {
   const existing = await getDelivery(deliveryId);
   if (!existing) throw new HttpError('Delivery not found', 404);
   if (existing.status === 'calling') throw new HttpError('A call is already in progress for this delivery', 409);
@@ -129,7 +129,6 @@ export async function startCall(deliveryId: string, outcomeOverride?: string): P
     promptUrl: `${config.publicBaseUrl}/webhooks/twilio/voice?deliveryId=${deliveryId}`,
     statusCallbackUrl: `${config.publicBaseUrl}/webhooks/twilio/status?deliveryId=${deliveryId}`,
     record: true,
-    outcome: telephonyProvider.name === 'mock' ? outcomeOverride : undefined,
   }).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     throw new HttpError(`Could not place call: ${message}`, 400);

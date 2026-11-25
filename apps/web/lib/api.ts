@@ -14,11 +14,9 @@ export async function fetchDeliveries(status: DeliveryStatus | 'all'): Promise<D
   return response.json() as Promise<DeliveriesResponse>;
 }
 
-export async function callDelivery(id: string, mockOutcome?: string): Promise<void> {
+export async function callDelivery(id: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/deliveries/${encodeURIComponent(id)}/call`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(mockOutcome ? { outcome: mockOutcome } : {}),
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -31,11 +29,11 @@ export interface BulkCallResult {
   failed: Array<{ id: string; reason: string | null }>;
 }
 
-export async function bulkCall(ids: string[], mockOutcome?: string): Promise<BulkCallResult> {
+export async function bulkCall(ids: string[]): Promise<BulkCallResult> {
   const response = await fetch(`${API_BASE}/api/deliveries/bulk-call`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ids, outcome: mockOutcome }),
+    body: JSON.stringify({ ids }),
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { error?: string };

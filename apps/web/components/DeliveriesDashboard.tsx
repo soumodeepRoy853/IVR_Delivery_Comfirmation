@@ -26,7 +26,6 @@ export function DeliveriesDashboard() {
   const [filter, setFilter] = useState<Filter>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [mockOutcome, setMockOutcome] = useState('received');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -64,7 +63,7 @@ export function DeliveriesDashboard() {
     setError(null);
     setNotice(null);
     try {
-      const result = await bulkCall([...selected], mockOutcome);
+      const result = await bulkCall([...selected]);
       const failed = result.failed.length;
       setNotice(
         `Started ${result.started} call${result.started === 1 ? '' : 's'}.` +
@@ -115,16 +114,6 @@ export function DeliveriesDashboard() {
                 {STATUS_LABELS[status]}
               </option>
             ))}
-          </select>
-        </label>
-
-        <label>
-          Mock outcome
-          <select value={mockOutcome} onChange={(event) => setMockOutcome(event.target.value)}>
-            <option value="received">Received</option>
-            <option value="not_received">Not received</option>
-            <option value="no_answer">No answer</option>
-            <option value="timeout">Timeout (repeat once)</option>
           </select>
         </label>
 
@@ -192,7 +181,7 @@ export function DeliveriesDashboard() {
                 busy={busy === delivery.id}
                 onToggleSelected={() => toggleSelected(delivery.id)}
                 onToggleExpanded={() => setExpanded(expanded === delivery.id ? null : delivery.id)}
-                onCall={() => runAction(() => callDelivery(delivery.id, mockOutcome), delivery.id)}
+                onCall={() => runAction(() => callDelivery(delivery.id), delivery.id)}
               />
             ))}
           </tbody>
