@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  deliveryStatusForOutcome,
   formatDeliveryDate,
   interpretInput,
   mapProviderCallStatus,
+  parseAttempt,
   parseDuration,
 } from '../src/ivr/mapping';
 
@@ -58,4 +60,21 @@ test('duration parsing ignores empty and invalid values', () => {
 
 test('delivery dates are formatted in IST-friendly form', () => {
   assert.equal(formatDeliveryDate('2026-11-24'), '24 November 2026');
+});
+
+test('final call outcomes reconcile the delivery status', () => {
+  assert.equal(deliveryStatusForOutcome('pending'), null);
+  assert.equal(deliveryStatusForOutcome('received'), 'received');
+  assert.equal(deliveryStatusForOutcome('not_received'), 'not_received');
+  for (const outcome of ['no_answer_failed', 'no_input', 'invalid_input'] as const) {
+    assert.equal(deliveryStatusForOutcome(outcome), 'no_answer_failed');
+  }
+});
+
+test('invalid IVR attempt values fall back to the first question', () => {
+  assert.equal(parseAttempt(undefined), 1);
+  assert.equal(parseAttempt('1'), 1);
+  assert.equal(parseAttempt('2'), 2);
+  assert.equal(parseAttempt('9'), 1);
+  assert.equal(parseAttempt('abc'), 1);
 });

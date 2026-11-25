@@ -50,7 +50,7 @@ export function CallLogPanel({ calls }: { calls: CallLog[] }) {
               <td>{call.provider_status ?? '—'}</td>
               <td>
                 {call.recording_url ? (
-                  <a href={call.recording_url} target="_blank" rel="noreferrer">
+                  <a href={`/api/recording/${encodeURIComponent(call.id)}`} target="_blank" rel="noreferrer">
                     Listen
                   </a>
                 ) : (

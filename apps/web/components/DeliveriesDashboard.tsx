@@ -29,6 +29,7 @@ export function DeliveriesDashboard() {
   const [mockOutcome, setMockOutcome] = useState('received');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const { data, isLoading, isValidating, mutate } = useSWR(
     ['deliveries', filter],
@@ -50,6 +51,25 @@ export function DeliveriesDashboard() {
     setError(null);
     try {
       await action();
+      await mutate();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Something went wrong');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function callSelected() {
+    setBusy('bulk');
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await bulkCall([...selected], mockOutcome);
+      const failed = result.failed.length;
+      setNotice(
+        `Started ${result.started} call${result.started === 1 ? '' : 's'}.` +
+          (failed > 0 ? ` ${failed} could not be started.` : ''),
+      );
       await mutate();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something went wrong');
@@ -112,14 +132,14 @@ export function DeliveriesDashboard() {
           type="button"
           className="secondary"
           disabled={selected.size === 0 || busy !== null}
-          onClick={() =>
-            runAction(() => bulkCall([...selected], mockOutcome), 'bulk')}
+          onClick={callSelected}
         >
           Call selected ({selected.size})
         </button>
       </section>
 
       {error && <div className="alert" role="alert">{error}</div>}
+      {notice && <div className="notice" role="status">{notice}</div>}
 
       <section className="summary" aria-label="Status summary">
         {STATUSES.map((status) => (

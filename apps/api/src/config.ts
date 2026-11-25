@@ -42,7 +42,20 @@ export const config = {
   twilioFromNumber: process.env.TWILIO_FROM_NUMBER ?? '',
   companyName: process.env.COMPANY_NAME ?? 'Our Team',
   webhookValidation: (process.env.WEBHOOK_VALIDATION ?? 'true').toLowerCase() !== 'false',
+  dashboardUser: process.env.DASHBOARD_USER ?? '',
+  dashboardPassword: process.env.DASHBOARD_PASSWORD ?? '',
+  webOrigin: process.env.WEB_ORIGIN ?? '',
 } as const;
+
+if (process.env.NODE_ENV === 'production') {
+  for (const [name, value] of Object.entries({
+    DASHBOARD_USER: config.dashboardUser,
+    DASHBOARD_PASSWORD: config.dashboardPassword,
+    WEB_ORIGIN: config.webOrigin,
+  })) {
+    if (!value) throw new Error(`Missing required environment variable in production: ${name}`);
+  }
+}
 
 if (config.telephonyProvider === 'twilio') {
   for (const [name, value] of Object.entries({

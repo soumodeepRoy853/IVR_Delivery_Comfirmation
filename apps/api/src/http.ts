@@ -1,7 +1,11 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 export class HttpError extends Error {
-  constructor(message: string, public readonly status = 400) {
+  constructor(
+    message: string,
+    public readonly status = 400,
+    public readonly headers?: Record<string, string>,
+  ) {
     super(message);
   }
 }

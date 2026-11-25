@@ -23,7 +23,10 @@ test('voice prompt is personalised and accepts DTMF and speech', () => {
   assert.match(xml, /press 1 or say Yes/);
   assert.match(xml, /press 2 or say No/);
   assert.match(xml, /input="dtmf speech"/);
-  assert.match(xml, /speechLanguage="en-IN hi-IN"/);
+  assert.match(xml, /actionOnEmptyResult="true"/);
+  assert.match(xml, /speechModel="deepgram_nova-3"/);
+  assert.match(xml, /language="multi"/);
+  assert.match(xml, /hints="[^"]*haan[^"]*nahi[^"]*"/);
   assert.match(xml, /attempt=1(&amp;|&)deliveryId=delivery-123/);
 });
 
