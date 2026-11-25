@@ -7,7 +7,7 @@ import {
   buildRepeatTwiml,
   emptyTwiml,
 } from '../ivr/twiml';
-import { getDeliveryByCallSid } from './deliveries';
+import { getCallByProviderSid, getDeliveryByCallSid } from './deliveries';
 import type { CallOutcome, DeliveryWithCalls } from '../types';
 
 /**
@@ -38,7 +38,7 @@ export async function applyGather(
   const delivery = await findDelivery(callSid, deliveryId);
   if (!delivery) return emptyTwiml();
 
-  const call = delivery.calls[0];
+  const call = await getCallByProviderSid(callSid);
   if (!call || call.outcome !== 'pending') {
     // A response was already recorded; never overwrite it with a duplicate callback.
     return buildGoodbyeTwiml(true);
@@ -104,12 +104,15 @@ export async function applyStatus(
   const recordingUrl = typeof body.RecordingUrl === 'string' ? body.RecordingUrl : null;
   const isFinal = mappedStatus !== null || providerStatus === 'completed';
 
-  const current = delivery.calls[0];
+  const current = await getCallByProviderSid(callSid);
   let nextOutcome: CallOutcome | null = null;
   if (current?.outcome === 'pending') {
     if (mappedStatus) nextOutcome = 'no_answer_failed';
     else if (providerStatus === 'completed') nextOutcome = 'no_input';
   }
+  // A completed call without a recorded answer is a failed confirmation. The
+  // WHERE status = 'calling' guard below keeps an already answered delivery intact.
+  const finalStatus = mappedStatus ?? (providerStatus === 'completed' ? 'no_answer_failed' : null);
 
   await withTransaction(async (client) => {
     await client.query(
@@ -124,11 +127,11 @@ export async function applyStatus(
       [callSid, isFinal, duration, providerStatus, JSON.stringify(body), recordingUrl, nextOutcome],
     );
 
-    if (mappedStatus) {
+    if (finalStatus) {
       await client.query(
         `UPDATE deliveries SET status = $2, updated_at = now()
           WHERE id = $1 AND status = 'calling'`,
-        [delivery.id, mappedStatus],
+        [delivery.id, finalStatus],
       );
     }
   });

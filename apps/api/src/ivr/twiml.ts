@@ -32,16 +32,24 @@ export function buildVoiceTwiml(input: VoiceTwimlInput): string {
     ? `&deliveryId=${encodeURIComponent(input.deliveryId)}`
     : '';
 
-  const gatherAttributes = {
+  type GatherAttributes = NonNullable<Parameters<typeof response.gather>[0]>;
+
+  // Twilio only accepts a single `language` value. Multi-language recognition is
+  // available with the Deepgram nova-3 model, which lets us accept English and
+  // Hindi yes/no answers in the same Gather. The installed SDK's language union
+  // predates "multi", so only that field needs widening.
+  const gatherAttributes: GatherAttributes = {
     input: ['dtmf', 'speech'],
     numDigits: 1,
     timeout: 5,
-    speechTimeout: 'auto',
-    language: 'en-IN',
-    speechLanguage: 'en-IN hi-IN',
+    speechTimeout: '3',
+    speechModel: 'deepgram_nova-3',
+    language: 'multi' as unknown as GatherAttributes['language'],
+    hints: 'yes, no, haan, nahi, ji haan, nahi mila, received, not received',
+    actionOnEmptyResult: true,
     action: `${input.baseUrl}/webhooks/twilio/gather?attempt=${attempt}${deliveryParam}`,
     method: 'POST',
-  } as Parameters<typeof response.gather>[0] & { speechLanguage: string };
+  };
 
   const gather = response.gather(gatherAttributes);
   gather.say(VOICE, prompt);

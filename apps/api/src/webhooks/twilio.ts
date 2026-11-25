@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { config } from '../config';
 import { asyncHandler, HttpError } from '../http';
+import { parseAttempt } from '../ivr/mapping';
 import { applyGather, applyStatus } from '../services/calls';
 import { getDelivery, getDeliveryByCallSid } from '../services/deliveries';
 import { isValidTwilioSignature } from '../telephony/twilio';
@@ -43,7 +44,7 @@ twilioWebhooksRouter.post(
         company: config.companyName,
         product: delivery.product,
         date: delivery.delivery_date,
-        attempt: Number(req.query.attempt ?? 1),
+        attempt: parseAttempt(req.query.attempt),
         baseUrl: config.publicBaseUrl,
         deliveryId: typeof req.query.deliveryId === 'string' ? req.query.deliveryId : undefined,
       }),
@@ -55,7 +56,7 @@ twilioWebhooksRouter.post(
   '/gather',
   asyncHandler(async (req, res) => {
     const callSid = String(req.body?.CallSid ?? '');
-    const attempt = Number(req.query.attempt ?? 1);
+    const attempt = parseAttempt(req.query.attempt);
     const deliveryId = typeof req.query.deliveryId === 'string' ? req.query.deliveryId : undefined;
     const twiml = callSid
       ? await applyGather(

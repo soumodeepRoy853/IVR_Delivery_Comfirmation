@@ -1,0 +1,28 @@
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm ci
+COPY . .
+RUN npm run build -w @ivr/web
+
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm ci --omit=dev
+
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY apps/web/package.json apps/web/package.json
+COPY apps/api/package.json apps/api/package.json
+COPY --from=build /app/apps/web/.next ./apps/web/.next
+COPY --from=build /app/apps/web/next.config.ts ./apps/web/next.config.ts
+COPY --from=build /app/apps/web/tsconfig.json ./apps/web/tsconfig.json
+EXPOSE 3000
+CMD ["npm", "run", "start", "-w", "@ivr/web"]

@@ -35,6 +35,28 @@ export function interpretInput(input: { digits?: string | null; speech?: string 
   return { outcome: 'no_input', status: null, rawInput };
 }
 
+/** Maps a stored call outcome to the delivery status it implies, or null while pending. */
+export function deliveryStatusForOutcome(outcome: CallOutcome): DeliveryStatus | null {
+  switch (outcome) {
+    case 'received':
+      return 'received';
+    case 'not_received':
+      return 'not_received';
+    case 'no_answer_failed':
+    case 'no_input':
+    case 'invalid_input':
+      return 'no_answer_failed';
+    default:
+      return null;
+  }
+}
+
+/** Reads the IVR attempt query parameter, defaulting to the first question. */
+export function parseAttempt(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 2 ? parsed : 1;
+}
+
 /** Maps a telephony call-status callback to a delivery status, or null if not terminal. */
 export function mapProviderCallStatus(callStatus: string): DeliveryStatus | null {
   switch (callStatus.toLowerCase().trim()) {
